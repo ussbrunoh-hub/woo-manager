@@ -23,7 +23,7 @@ struct ProductEditor: View {
         VStack(spacing: 16) {
             Text(product.displayName).font(.title2).bold().lineLimit(2)
             Form {
-                LabeledContent("Prix (€)") {
+                LabeledContent("Prix") {
                     TextField("0.00", text: $price).textFieldStyle(.roundedBorder)
                 }
                 Toggle("Gérer le stock", isOn: $manageStock)

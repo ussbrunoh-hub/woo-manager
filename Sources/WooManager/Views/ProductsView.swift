@@ -4,6 +4,7 @@ struct ProductsView: View {
     @EnvironmentObject private var state: AppState
     @State private var search = ""
     @State private var editing: WooProduct?
+    @State private var detail: WooProduct?
 
     var body: some View {
         VStack(spacing: 0) {
@@ -24,6 +25,9 @@ struct ProductsView: View {
         .task { if state.products.isEmpty { await state.loadProducts() } }
         .sheet(item: $editing) { product in
             ProductEditor(product: product)
+        }
+        .sheet(item: $detail) { product in
+            ProductDetail(product: product)
         }
     }
 
@@ -58,7 +62,14 @@ struct ProductsView: View {
                 }
             }
             TableColumn("SKU") { product in Text(product.sku ?? "—").foregroundStyle(.secondary) }
-            TableColumn("Prix") { product in Text(product.displayPrice) }
+            TableColumn("Catégories") { product in
+                Text(product.categoryNames)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
+            TableColumn("Prix") { product in
+                Text(product.displayPrice)
+            }
             TableColumn("Stock") { product in
                 Text(product.manageStock == true ? "\(product.stockQuantity ?? 0)" : (product.stockStatus == "instock" ? "En stock" : "Rupture"))
             }
@@ -67,9 +78,11 @@ struct ProductsView: View {
                     .foregroundStyle(product.status == "publish" ? .green : .orange)
             }
             TableColumn("") { product in
-                Button("Modifier") { editing = product }
+                HStack(spacing: 6) {
+                    Button("Détails") { detail = product }
+                    Button("Modifier") { editing = product }
+                }
             }
         }
     }
 }
-

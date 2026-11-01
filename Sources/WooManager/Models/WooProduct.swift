@@ -21,6 +21,8 @@ struct WooProduct: Codable, Identifiable, Hashable {
     var type: String?
     var categories: [WooCategory]?
     var images: [WooImage]?
+    var attributes: [WooAttribute]?
+    var metaData: [WooMeta]?
 
     enum CodingKeys: String, CodingKey {
         case id, name, slug, permalink, status
@@ -34,14 +36,15 @@ struct WooProduct: Codable, Identifiable, Hashable {
         case stockStatus = "stock_status"
         case stockQuantity = "stock_quantity"
         case manageStock = "manage_stock"
-        case weight, type, categories, images
+        case weight, type, categories, images, attributes
+        case metaData = "meta_data"
     }
 
-    var displayName: String { name.replacingOccurrences(of: "&#8211;", with: "–").replacingOccurrences(of: "&#8217;", with: "'").replacingOccurrences(of: "&amp;", with: "&") }
+    var displayName: String { name.strippingHTML }
 
     var displayPrice: String {
         guard let price, !price.isEmpty else { return "—" }
-        return "\(price) €"
+        return price
     }
 
     var categoryNames: String {
@@ -51,6 +54,10 @@ struct WooProduct: Codable, Identifiable, Hashable {
     var imageURL: URL? {
         guard let src = images?.first?.src else { return nil }
         return URL(string: src)
+    }
+
+    var cleanDescription: String {
+        (description ?? "").strippingHTML
     }
 }
 
@@ -64,5 +71,45 @@ struct WooImage: Codable, Hashable {
     let src: String
 }
 
-extension WooImage: Sendable {}
-extension WooProduct: Sendable {}
+struct WooAttribute: Codable, Hashable {
+    let id: Int?
+    let name: String
+    let options: [String]?
+    let variation: Bool?
+
+    var optionsText: String {
+        (options ?? []).joined(separator: " · ")
+    }
+}
+
+struct WooMeta: Codable, Hashable {
+    let key: String
+    let value: WooMetaValue?
+}
+
+enum WooMetaValue: Codable, Hashable {
+    case string(String)
+    case int(Int)
+    case other
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.singleValueContainer()
+        if let s = try? container.decode(String.self) {
+            self = .string(s)
+        } else if let i = try? container.decode(Int.self) {
+            self = .int(i)
+        } else {
+            self = .other
+        }
+    }
+
+    func encode(to encoder: Encoder) throws {}
+
+    var display: String {
+        switch self {
+        case .string(let s): return s
+        case .int(let i): return "\(i)"
+        case .other: return "—"
+        }
+    }
+}
