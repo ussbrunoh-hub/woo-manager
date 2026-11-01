@@ -1,6 +1,7 @@
 import SwiftUI
 
 struct ProductDetail: View {
+    @EnvironmentObject private var state: AppState
     @Environment(\.dismiss) private var dismiss
     let product: WooProduct
 
@@ -18,25 +19,18 @@ struct ProductDetail: View {
                         if let sku = product.sku, !sku.isEmpty {
                             Text("SKU : \(sku)").foregroundStyle(.secondary)
                         }
+                        Text("ID produit : \(product.id)").foregroundStyle(.secondary).font(.callout)
                         HStack {
-                            labelPill(product.status == "publish" ? "Publié" : "Brouillon",
-                                      color: product.status == "publish" ? .green : .orange)
-                            labelPill("Prix : \(product.displayPrice)", color: .blue)
+                            let region = state.region(for: product)
+                            labelPill(region.isEmpty || region == "—" ? "Région inconnue" : regionLabel(region),
+                                      color: regionColor(region))
+                            labelPill("Prix : \(product.displayPrice) \(state.currency(for: region))", color: .blue)
                             if product.onSale == true {
                                 labelPill("En promo", color: .red)
-                            }
-                            if let sale = product.salePrice, !sale.isEmpty {
-                                labelPill("Prix promo : \(sale)", color: .red)
                             }
                         }
                     }
                     Spacer()
-                }
-
-                if !product.categoryNames.isEmpty {
-                    section("Catégories (zones)") {
-                        Text(product.categoryNames)
-                    }
                 }
 
                 if let attrs = product.attributes, !attrs.isEmpty {
@@ -53,7 +47,7 @@ struct ProductDetail: View {
                 }
 
                 if let meta = product.metaData, !meta.isEmpty {
-                    let interesting = meta.filter { !$0.key.hasPrefix("_") && $0.value?.display.isEmpty == false }
+                    let interesting = meta.filter { !$0.key.hasPrefix("_") && $0.value?.display.isEmpty == false && $0.key != "canonical_demo" }
                     if !interesting.isEmpty {
                         section("Données supplémentaires") {
                             VStack(alignment: .leading, spacing: 6) {
@@ -92,6 +86,24 @@ struct ProductDetail: View {
                     .foregroundStyle(.secondary)
             }
             .padding(12)
+        }
+    }
+
+    private func regionLabel(_ region: String) -> String {
+        switch region {
+        case "EU": return "🇪🇺 Europe (EUR)"
+        case "US": return "🇺🇸 USA (USD)"
+        case "CH": return "🇨🇭 Suisse (CHF)"
+        default: return "—"
+        }
+    }
+
+    private func regionColor(_ region: String) -> Color {
+        switch region {
+        case "EU": return .blue
+        case "US": return .purple
+        case "CH": return .red
+        default: return .secondary
         }
     }
 

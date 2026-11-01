@@ -110,4 +110,21 @@ final class WooClient {
         if let status { query.append(URLQueryItem(name: "status", value: status)) }
         return try await run(try request(path: "wp/v2/\(type)", query: query), as: [WPPost].self)
     }
+
+    func regionMap() async throws -> [Int: String] {
+        struct RegionRow: Decodable {
+            let name: String?
+            let EU_Product_id: String?
+            let Swiss_Product_ID: String?
+            let USA_Product_ID: String?
+        }
+        let rows: [RegionRow] = try await run(try request(path: "wooregion/v1/map"), as: [RegionRow].self)
+        var map: [Int: String] = [:]
+        for row in rows {
+            if let id = Int(row.EU_Product_id ?? "") { map[id] = "EU" }
+            if let id = Int(row.Swiss_Product_ID ?? "") { map[id] = "CH" }
+            if let id = Int(row.USA_Product_ID ?? "") { map[id] = "US" }
+        }
+        return map
+    }
 }

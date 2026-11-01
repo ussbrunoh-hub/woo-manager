@@ -10,6 +10,7 @@ final class AppState: ObservableObject {
     @Published var orders: [WooOrder] = []
     @Published var posts: [WPPost] = []
     @Published var pages: [WPPost] = []
+    @Published var regionByProduct: [Int: String] = [:]
     @Published var loadingProducts = false
     @Published var loadingOrders = false
     @Published var loadingContent = false
@@ -31,13 +32,31 @@ final class AppState: ObservableObject {
         errorMessage = error.localizedDescription
     }
 
+    func region(for product: WooProduct) -> String {
+        regionByProduct[product.id] ?? "—"
+    }
+
+    func currency(for region: String) -> String {
+        switch region {
+        case "EU": return "EUR"
+        case "CH": return "CHF"
+        case "US": return "USD"
+        default: return ""
+        }
+    }
+
     func loadProducts(search: String = "") async {
         reconnectIfNeeded()
         guard let client else { errorMessage = "Configurez le site dans Réglages d'abord."; return }
         loadingProducts = true
         defer { loadingProducts = false }
         do {
-            products = try await client.products(search: search.isEmpty ? nil : search)
+            async let p = client.products(search: search.isEmpty ? nil : search)
+            async let r = client.regionMap()
+            products = try await p
+            if let map = try? await r {
+                regionByProduct = map
+            }
         } catch { handleError(error) }
     }
 
