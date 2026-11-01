@@ -1,4 +1,5 @@
 import SwiftUI
+import AppKit
 
 struct SettingsView: View {
     @EnvironmentObject private var state: AppState
@@ -14,6 +15,9 @@ struct SettingsView: View {
                     .textFieldStyle(.roundedBorder)
                 SecureField("Secret client (cs_…)", text: $state.config.consumerSecret)
                     .textFieldStyle(.roundedBorder)
+            }
+            .onAppear {
+                NSApp.activate(ignoringOtherApps: true)
             }
             Section {
                 HStack {

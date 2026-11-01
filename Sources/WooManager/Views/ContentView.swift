@@ -1,4 +1,5 @@
 import SwiftUI
+import AppKit
 
 enum WooSection: String, CaseIterable, Identifiable {
     case products = "Produits"
@@ -27,6 +28,12 @@ struct WooManagerApp: App {
             ContentView()
                 .environmentObject(state)
                 .frame(minWidth: 900, minHeight: 620)
+                .onAppear {
+                    NSApp.activate(ignoringOtherApps: true)
+                    if let window = NSApp.windows.first {
+                        window.makeKeyAndOrderFront(nil)
+                    }
+                }
         }
         .windowStyle(.automatic)
     }
