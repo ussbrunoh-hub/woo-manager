@@ -49,7 +49,8 @@ struct WooProduct: Codable, Identifiable, Hashable {
     }
 
     var imageURL: URL? {
-        images?.first?.src
+        guard let src = images?.first?.src else { return nil }
+        return URL(string: src)
     }
 }
 
@@ -62,3 +63,6 @@ struct WooImage: Codable, Hashable {
     let id: Int?
     let src: String
 }
+
+extension WooImage: Sendable {}
+extension WooProduct: Sendable {}
