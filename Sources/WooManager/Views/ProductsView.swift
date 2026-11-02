@@ -30,7 +30,16 @@ struct ProductsView: View {
                 productTable
             }
         }
-        .task { if state.products.isEmpty { await state.loadProducts() } }
+        .task {
+            if state.products.isEmpty && state.config.isValid {
+                await state.loadProducts()
+            }
+        }
+        .onChange(of: state.config.isValid) { _, valid in
+            if valid && state.products.isEmpty {
+                Task { await state.loadProducts() }
+            }
+        }
         .sheet(item: $editing) { product in
             ProductEditor(product: product)
         }

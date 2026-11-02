@@ -52,12 +52,18 @@ final class AppState: ObservableObject {
         defer { loadingProducts = false }
         do {
             async let p = client.products(search: search.isEmpty ? nil : search)
-            async let r = client.regionMap()
-            products = try await p
-            if let map = try? await r {
+            async let r = try? client.regionMap()
+            let loaded = try await p
+            products = loaded
+            if let map = await r {
                 regionByProduct = map
             }
-        } catch { handleError(error) }
+            if loaded.isEmpty {
+                errorMessage = "Le site n'a renvoyé aucun produit. Vérifiez que la boutique contient des produits publiés."
+            }
+        } catch {
+            handleError(error)
+        }
     }
 
     func saveProduct(_ product: WooProduct) async {
