@@ -33,13 +33,18 @@ final class WooClient {
     private let secret: String
 
     init(config: SiteConfig) {
-        self.session = URLSession(configuration: .ephemeral)
-        let url = config.siteURL
+        let cfg = URLSessionConfiguration.ephemeral
+        cfg.timeoutIntervalForRequest = 30
+        cfg.waitsForConnectivity = true
+        self.session = URLSession(configuration: cfg)
+        var url = config.siteURL.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !url.hasPrefix("http") { url = "https://" + url }
+        url = url
             .replacingOccurrences(of: "wp-json", with: "")
             .replacingOccurrences(of: "/+$", with: "", options: .regularExpression)
         self.baseURL = URL(string: url) ?? URL(string: "https://invalid")!
-        self.key = config.consumerKey
-        self.secret = config.consumerSecret
+        self.key = config.consumerKey.trimmingCharacters(in: .whitespacesAndNewlines)
+        self.secret = config.consumerSecret.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     private func request(path: String, query: [URLQueryItem] = [], method: String = "GET", body: Data? = nil) throws -> URLRequest {

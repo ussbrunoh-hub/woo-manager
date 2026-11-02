@@ -24,7 +24,19 @@ struct ProductsView: View {
                 Spacer()
             } else if filtered.isEmpty {
                 Spacer()
-                ContentUnavailableView("Aucun produit", systemImage: "shippingbox", description: Text("Cliquez sur « Actualiser » ou recherchez."))
+                VStack(spacing: 10) {
+                    if state.products.isEmpty {
+                        Image(systemName: "shippingbox")
+                            .font(.largeTitle)
+                            .foregroundStyle(.secondary)
+                        Text(state.errorMessage ?? "Aucun produit")
+                            .bold()
+                        Text("Vérifiez Réglages puis cliquez sur « Actualiser ».")
+                            .foregroundStyle(.secondary)
+                    } else {
+                        ContentUnavailableView("Aucun produit pour cette zone", systemImage: "shippingbox", description: Text("Changez de filtre de région."))
+                    }
+                }
                 Spacer()
             } else {
                 productTable
