@@ -84,24 +84,70 @@ final class WooClient {
     }
 
     func products(page: Int = 1, search: String? = nil, status: String? = nil) async throws -> [WooProduct] {
-        var query = [URLQueryItem(name: "per_page", value: "50"), URLQueryItem(name: "page", value: "\(page)"), URLQueryItem(name: "orderby", value: "title"), URLQueryItem(name: "order", value: "asc")]
+        var query = [URLQueryItem(name: "per_page", value: "100"), URLQueryItem(name: "page", value: "\(page)"), URLQueryItem(name: "orderby", value: "title"), URLQueryItem(name: "order", value: "asc")]
         if let search, !search.isEmpty { query.append(URLQueryItem(name: "search", value: search)) }
         if let status { query.append(URLQueryItem(name: "status", value: status)) }
         return try await run(try request(path: "wc/v3/products", query: query), as: [WooProduct].self)
     }
 
-    func updateProduct(_ product: WooProduct) async throws -> WooProduct {
-        struct Update: Codable { let regularPrice: String?; let stockQuantity: Int?; let status: String?
-            enum CodingKeys: String, CodingKey { case regularPrice = "regular_price"; case stockQuantity = "stock_quantity"; case status }
+    func allProducts(search: String? = nil) async throws -> [WooProduct] {
+        var result: [WooProduct] = []
+        for page in 1...20 {
+            let batch = try await products(page: page, search: search)
+            result += batch
+            if batch.count < 100 { break }
         }
-        let body = try JSONEncoder().encode(Update(regularPrice: product.regularPrice, stockQuantity: product.stockQuantity, status: product.status))
+        return result
+    }
+
+    func updateProduct(_ product: WooProduct) async throws -> WooProduct {
+        struct Update: Codable {
+            let name: String
+            let regularPrice: String?
+            let salePrice: String?
+            let description: String?
+            let shortDescription: String?
+            let stockQuantity: Int?
+            let manageStock: Bool?
+            let status: String
+            enum CodingKeys: String, CodingKey {
+                case name
+                case regularPrice = "regular_price"
+                case salePrice = "sale_price"
+                case description
+                case shortDescription = "short_description"
+                case stockQuantity = "stock_quantity"
+                case manageStock = "manage_stock"
+                case status
+            }
+        }
+        let body = try JSONEncoder().encode(Update(
+            name: product.name,
+            regularPrice: product.regularPrice,
+            salePrice: (product.salePrice?.isEmpty == true) ? nil : product.salePrice,
+            description: product.description,
+            shortDescription: product.shortDescription,
+            stockQuantity: product.manageStock == true ? product.stockQuantity : nil,
+            manageStock: product.manageStock,
+            status: product.status
+        ))
         return try await run(try request(path: "wc/v3/products/\(product.id)", method: "PUT", body: body), as: WooProduct.self)
     }
 
     func orders(page: Int = 1, status: String? = nil) async throws -> [WooOrder] {
-        var query = [URLQueryItem(name: "per_page", value: "50"), URLQueryItem(name: "page", value: "\(page)"), URLQueryItem(name: "orderby", value: "date"), URLQueryItem(name: "order", value: "desc")]
+        var query = [URLQueryItem(name: "per_page", value: "100"), URLQueryItem(name: "page", value: "\(page)"), URLQueryItem(name: "orderby", value: "date"), URLQueryItem(name: "order", value: "desc")]
         if let status { query.append(URLQueryItem(name: "status", value: status)) }
         return try await run(try request(path: "wc/v3/orders", query: query), as: [WooOrder].self)
+    }
+
+    func allOrders(maxPages: Int = 5) async throws -> [WooOrder] {
+        var result: [WooOrder] = []
+        for page in 1...maxPages {
+            let batch = try await orders(page: page)
+            result += batch
+            if batch.count < 100 { break }
+        }
+        return result
     }
 
     func updateOrderStatus(id: Int, status: String) async throws -> WooOrder {
@@ -126,9 +172,9 @@ final class WooClient {
         let rows: [RegionRow] = try await run(try request(path: "wooregion/v1/map"), as: [RegionRow].self)
         var map: [Int: String] = [:]
         for row in rows {
-            if let id = Int(row.EU_Product_id ?? "") { map[id] = "EU" }
-            if let id = Int(row.Swiss_Product_ID ?? "") { map[id] = "CH" }
-            if let id = Int(row.USA_Product_ID ?? "") { map[id] = "US" }
+            if let id = Int((row.EU_Product_id ?? "").trimmingCharacters(in: .whitespaces)) { map[id] = "EU" }
+            if let id = Int((row.Swiss_Product_ID ?? "").trimmingCharacters(in: .whitespaces)) { map[id] = "CH" }
+            if let id = Int((row.USA_Product_ID ?? "").trimmingCharacters(in: .whitespaces)) { map[id] = "US" }
         }
         return map
     }

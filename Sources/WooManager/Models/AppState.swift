@@ -33,12 +33,7 @@ final class AppState: ObservableObject {
     }
 
     func region(for product: WooProduct) -> String {
-        if let meta = product.metaData,
-           let regionMeta = meta.first(where: { $0.key == "region" }),
-           let value = regionMeta.value?.display,
-           ["EU", "CH", "US"].contains(value) {
-            return value
-        }
+        if let code = product.regionCode { return code }
         return regionByProduct[product.id] ?? "—"
     }
 
@@ -57,7 +52,7 @@ final class AppState: ObservableObject {
         loadingProducts = true
         defer { loadingProducts = false }
         do {
-            async let p = client.products(search: search.isEmpty ? nil : search)
+            async let p = client.allProducts(search: search.isEmpty ? nil : search)
             async let r = try? client.regionMap()
             let loaded = try await p
             products = loaded
@@ -83,13 +78,17 @@ final class AppState: ObservableObject {
         } catch { handleError(error) }
     }
 
-    func loadOrders(status: String? = nil) async {
+    func loadOrders() async {
+        await loadOrdersFiltered(status: nil)
+    }
+
+    func loadOrdersFiltered(status: String? = nil) async {
         reconnectIfNeeded()
         guard let client else { errorMessage = "Configurez le site dans Réglages d'abord."; return }
         loadingOrders = true
         defer { loadingOrders = false }
         do {
-            orders = try await client.orders(status: status)
+            orders = try await client.allOrders()
         } catch { handleError(error) }
     }
 

@@ -6,6 +6,7 @@ struct ProductsView: View {
     @State private var editing: WooProduct?
     @State private var detail: WooProduct?
     @State private var regionFilter: String?
+    @State private var groupedMode = false
 
     private let regionFilters: [(String?, String)] = [
         (nil, "Toutes"),
@@ -22,22 +23,20 @@ struct ProductsView: View {
                 Spacer()
                 ProgressView("Chargement des produits…")
                 Spacer()
-            } else if filtered.isEmpty {
+            } else if filteredProducts.isEmpty {
                 Spacer()
                 VStack(spacing: 10) {
-                    if state.products.isEmpty {
-                        Image(systemName: "shippingbox")
-                            .font(.largeTitle)
-                            .foregroundStyle(.secondary)
-                        Text(state.errorMessage ?? "Aucun produit")
-                            .bold()
-                        Text("Vérifiez Réglages puis cliquez sur « Actualiser ».")
-                            .foregroundStyle(.secondary)
-                    } else {
-                        ContentUnavailableView("Aucun produit pour cette zone", systemImage: "shippingbox", description: Text("Changez de filtre de région."))
-                    }
+                    Image(systemName: "shippingbox")
+                        .font(.largeTitle)
+                        .foregroundStyle(.secondary)
+                    Text(state.products.isEmpty ? (state.errorMessage ?? "Aucun produit") : "Aucun produit pour cette zone")
+                        .bold()
+                    Text(state.products.isEmpty ? "Vérifiez Réglages puis cliquez sur « Actualiser »." : "Changez de filtre de région.")
+                        .foregroundStyle(.secondary)
                 }
                 Spacer()
+            } else if groupedMode {
+                groupedList
             } else {
                 productTable
             }
@@ -60,7 +59,7 @@ struct ProductsView: View {
         }
     }
 
-    private var filtered: [WooProduct] {
+    private var filteredProducts: [WooProduct] {
         guard let regionFilter else { return state.products }
         return state.products.filter { state.region(for: $0) == regionFilter }
     }
@@ -69,7 +68,7 @@ struct ProductsView: View {
         HStack {
             TextField("Rechercher…", text: $search)
                 .textFieldStyle(.roundedBorder)
-                .frame(width: 200)
+                .frame(width: 180)
                 .onSubmit { Task { await state.loadProducts(search: search) } }
             Picker("Région", selection: $regionFilter) {
                 ForEach(regionFilters, id: \.0) { item in
@@ -77,21 +76,103 @@ struct ProductsView: View {
                 }
             }
             .pickerStyle(.segmented)
-            .frame(width: 320)
+            .frame(width: 300)
+            Picker("Vue", selection: $groupedMode) {
+                Text("Par zone").tag(false)
+                Text("Groupée").tag(true)
+            }
+            .pickerStyle(.segmented)
+            .frame(width: 170)
             Button {
                 Task { await state.loadProducts(search: search) }
             } label: {
                 Label("Actualiser", systemImage: "arrow.clockwise")
             }
             Spacer()
-            Text("\(filtered.count) produits")
+            Text("\(filteredProducts.count) produits")
                 .foregroundStyle(.secondary)
         }
         .padding(10)
     }
 
+    // MARK: - Vue groupée
+
+    private var productGroups: [(key: String, items: [WooProduct])] {
+        let dict = Dictionary(grouping: filteredProducts) { $0.groupKey }
+        return dict
+            .map { (key: $0.key, items: $0.value.sorted { regionOrder($0) < regionOrder($1) }) }
+            .sorted { ($0.items.first?.displayName ?? "") < ($1.items.first?.displayName ?? "") }
+    }
+
+    private func regionOrder(_ product: WooProduct) -> Int {
+        switch state.region(for: product) {
+        case "EU": return 0
+        case "CH": return 1
+        case "US": return 2
+        default: return 3
+        }
+    }
+
+    private var groupedList: some View {
+        List {
+            ForEach(productGroups, id: \.key) { group in
+                DisclosureGroup {
+                    ForEach(group.items) { product in
+                        groupRow(product)
+                    }
+                } label: {
+                    HStack(spacing: 8) {
+                        if let url = group.items.first?.imageURL {
+                            AsyncImage(url: url) { image in image.resizable().scaledToFill() } placeholder: { Color.gray.opacity(0.15) }
+                                .frame(width: 26, height: 26)
+                                .clipShape(RoundedRectangle(cornerRadius: 4))
+                        }
+                        Text(group.items.first?.displayName ?? "—")
+                            .bold()
+                        Spacer()
+                        Text("\(group.items.count) version\(group.items.count > 1 ? "s" : "")")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            }
+        }
+    }
+
+    private func groupRow(_ product: WooProduct) -> some View {
+        let region = state.region(for: product)
+        return HStack {
+            regionPill(region)
+            Text(product.displayName)
+                .lineLimit(1)
+            Spacer()
+            Text("\(product.displayPrice) \(state.currency(for: region))")
+                .bold()
+            Text(product.manageStock == true ? "Stock : \(product.stockQuantity ?? 0)" : (product.stockStatus == "instock" ? "En stock" : "Rupture"))
+                .foregroundStyle(.secondary)
+                .font(.callout)
+            Button("Détails") { detail = product }
+                .buttonStyle(.link)
+            Button("Modifier") { editing = product }
+                .buttonStyle(.link)
+        }
+        .padding(.vertical, 2)
+    }
+
+    private func regionPill(_ region: String) -> some View {
+        Text(regionLabel(region))
+            .padding(.horizontal, 8)
+            .padding(.vertical, 2)
+            .background(regionColor(region).opacity(0.15))
+            .clipShape(Capsule())
+            .font(.caption)
+            .foregroundStyle(regionColor(region))
+    }
+
+    // MARK: - Table par zone
+
     private var productTable: some View {
-        Table(filtered) {
+        Table(filteredProducts) {
             TableColumn("Produit") { product in
                 HStack(spacing: 8) {
                     if let url = product.imageURL {

@@ -2,6 +2,7 @@ import SwiftUI
 import AppKit
 
 enum WooSection: String, CaseIterable, Identifiable {
+    case dashboard = "Tableau de bord"
     case products = "Produits"
     case orders = "Commandes"
     case content = "Contenu"
@@ -11,6 +12,7 @@ enum WooSection: String, CaseIterable, Identifiable {
 
     var icon: String {
         switch self {
+        case .dashboard: return "chart.bar"
         case .products: return "shippingbox"
         case .orders: return "cart"
         case .content: return "doc.text"
@@ -23,11 +25,15 @@ enum WooSection: String, CaseIterable, Identifiable {
 struct WooManagerApp: App {
     @StateObject private var state = AppState()
 
+    init() {
+        NSApplication.shared.setActivationPolicy(.regular)
+    }
+
     var body: some Scene {
         WindowGroup {
             ContentView()
                 .environmentObject(state)
-                .frame(minWidth: 900, minHeight: 620)
+                .frame(minWidth: 980, minHeight: 640)
                 .onAppear {
                     NSApp.activate(ignoringOtherApps: true)
                     if let window = NSApp.windows.first {
@@ -41,7 +47,7 @@ struct WooManagerApp: App {
 
 struct ContentView: View {
     @EnvironmentObject private var state: AppState
-    @State private var section: WooSection = .products
+    @State private var section: WooSection = .dashboard
 
     var body: some View {
         NavigationSplitView {
@@ -56,10 +62,11 @@ struct ContentView: View {
                 }
             }
             .listStyle(.sidebar)
-            .navigationSplitViewColumnWidth(min: 170, ideal: 190)
+            .navigationSplitViewColumnWidth(min: 180, ideal: 200)
         } detail: {
             Group {
                 switch section {
+                case .dashboard: DashboardView()
                 case .products: ProductsView()
                 case .orders: OrdersView()
                 case .content: ContentView_ContentTab()

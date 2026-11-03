@@ -2,7 +2,7 @@ import Foundation
 
 struct WooProduct: Codable, Identifiable, Hashable {
     let id: Int
-    let name: String
+    var name: String
     let slug: String?
     let permalink: String?
     var status: String
@@ -58,6 +58,22 @@ struct WooProduct: Codable, Identifiable, Hashable {
 
     var cleanDescription: String {
         (description ?? "").strippingHTML
+    }
+
+    var regionCode: String? {
+        guard let meta = metaData,
+              let r = meta.first(where: { $0.key == "region" }) else { return nil }
+        let v = r.value?.display ?? ""
+        return ["EU", "CH", "US"].contains(v) ? v : nil
+    }
+
+    var groupKey: String {
+        if let meta = metaData,
+           let g = meta.first(where: { $0.key == "region_group" }),
+           let v = g.value?.display, !v.isEmpty {
+            return v
+        }
+        return "solo-\(id)"
     }
 }
 
