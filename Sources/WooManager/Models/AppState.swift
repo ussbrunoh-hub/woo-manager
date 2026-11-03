@@ -33,7 +33,13 @@ final class AppState: ObservableObject {
     }
 
     func region(for product: WooProduct) -> String {
-        regionByProduct[product.id] ?? "—"
+        if let meta = product.metaData,
+           let regionMeta = meta.first(where: { $0.key == "region" }),
+           let value = regionMeta.value?.display,
+           ["EU", "CH", "US"].contains(value) {
+            return value
+        }
+        return regionByProduct[product.id] ?? "—"
     }
 
     func currency(for region: String) -> String {
