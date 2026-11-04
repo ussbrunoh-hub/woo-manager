@@ -54,6 +54,7 @@ final class WooClient {
     private let key: String
     private let secret: String
     private let contentAuth: String?
+    private var prefersRestRoute = false
 
     init(config: SiteConfig) {
         let cfg = URLSessionConfiguration.ephemeral
@@ -77,17 +78,43 @@ final class WooClient {
         }
     }
 
-    private func request(path: String, query: [URLQueryItem] = [], method: String = "GET", body: Data? = nil) throws -> URLRequest {
+    private func request(path: String, query: [URLQueryItem] = [], method: String = "GET", body: Data? = nil, restRoute: Bool = false) throws -> URLRequest {
+        var items = query
+        if restRoute {
+            guard var components = URLComponents(url: baseURL, resolvingAgainstBaseURL: false) else {
+                throw WooError.invalidURL
+            }
+            items.insert(URLQueryItem(name: "rest_route", value: "/\(path)"), at: 0)
+            components.queryItems = items.isEmpty ? nil : items
+            guard let url = components.url else { throw WooError.invalidURL }
+            return try buildRequest(url: url, path: path, method: method, body: body)
+        }
         guard var components = URLComponents(url: baseURL.appendingPathComponent("wp-json").appendingPathComponent(path), resolvingAgainstBaseURL: false) else {
             throw WooError.invalidURL
         }
-        var items = query
         if !path.hasPrefix("wp/") {
             items.append(URLQueryItem(name: "consumer_key", value: key))
             items.append(URLQueryItem(name: "consumer_secret", value: secret))
         }
         components.queryItems = items.isEmpty ? nil : items
         guard let url = components.url else { throw WooError.invalidURL }
+        return try buildRequest(url: url, path: path, method: method, body: body)
+    }
+
+    private func buildRequest(url: URL, path: String, method: String, body: Data?) throws -> URLRequest {
+        var req = URLRequest(url: url)
+        req.httpMethod = method
+        req.timeoutInterval = 30
+        req.setValue("WooManager/1.0 (macOS)", forHTTPHeaderField: "User-Agent")
+        if path.hasPrefix("wp/"), let contentAuth {
+            req.setValue("Basic \(contentAuth)", forHTTPHeaderField: "Authorization")
+        }
+        if let body {
+            req.httpBody = body
+            req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        }
+        return req
+    }
         var req = URLRequest(url: url)
         req.httpMethod = method
         req.timeoutInterval = 30
@@ -102,28 +129,38 @@ final class WooClient {
         return req
     }
 
-    private func run<T: Decodable>(_ req: URLRequest, as type: T.Type) async throws -> T {
-        let (data, response): (Data, URLResponse)
-        do {
-            (data, response) = try await session.data(for: req)
-        } catch {
-            throw WooError.invalidResponse
+    private func run<T: Decodable>(path: String, query: [URLQueryItem] = [], method: String = "GET", body: Data? = nil, as type: T.Type) async throws -> T {
+        var restRoute = prefersRestRoute
+        for attempt in 0...1 {
+            let req = try request(path: path, query: query, method: method, body: body, restRoute: restRoute)
+            let (data, response): (Data, URLResponse)
+            do {
+                (data, response) = try await session.data(for: req)
+            } catch {
+                throw WooError.invalidResponse
+            }
+            if let http = response as? HTTPURLResponse, !(200..<300).contains(http.statusCode) {
+                if http.statusCode == 403, attempt == 0, !restRoute {
+                    restRoute = true
+                    prefersRestRoute = true
+                    continue
+                }
+                throw WooError.http(http.statusCode, String(data: data, encoding: .utf8) ?? "")
+            }
+            do {
+                return try JSONDecoder().decode(T.self, from: data)
+            } catch {
+                throw WooError.decoding(error.localizedDescription)
+            }
         }
-        if let http = response as? HTTPURLResponse, !(200..<300).contains(http.statusCode) {
-            throw WooError.http(http.statusCode, String(data: data, encoding: .utf8) ?? "")
-        }
-        do {
-            return try JSONDecoder().decode(T.self, from: data)
-        } catch {
-            throw WooError.decoding(error.localizedDescription)
-        }
+        throw WooError.invalidResponse
     }
 
     func products(page: Int = 1, search: String? = nil, status: String? = nil) async throws -> [WooProduct] {
         var query = [URLQueryItem(name: "per_page", value: "100"), URLQueryItem(name: "page", value: "\(page)"), URLQueryItem(name: "orderby", value: "title"), URLQueryItem(name: "order", value: "asc")]
         if let search, !search.isEmpty { query.append(URLQueryItem(name: "search", value: search)) }
         if let status { query.append(URLQueryItem(name: "status", value: status)) }
-        return try await run(try request(path: "wc/v3/products", query: query), as: [WooProduct].self)
+        return try await run(path: "wc/v3/products", query: query, as: [WooProduct].self)
     }
 
     func allProducts(search: String? = nil) async throws -> [WooProduct] {
@@ -167,13 +204,13 @@ final class WooClient {
             manageStock: product.manageStock,
             status: product.status
         ))
-        return try await run(try request(path: "wc/v3/products/\(product.id)", method: "PUT", body: body), as: WooProduct.self)
+        return try await run(path: "wc/v3/products/\(product.id)", method: "PUT", body: body, as: WooProduct.self)
     }
 
     func orders(page: Int = 1, status: String? = nil) async throws -> [WooOrder] {
         var query = [URLQueryItem(name: "per_page", value: "100"), URLQueryItem(name: "page", value: "\(page)"), URLQueryItem(name: "orderby", value: "date"), URLQueryItem(name: "order", value: "desc")]
         if let status { query.append(URLQueryItem(name: "status", value: status)) }
-        return try await run(try request(path: "wc/v3/orders", query: query), as: [WooOrder].self)
+        return try await run(path: "wc/v3/orders", query: query, as: [WooOrder].self)
     }
 
     func allOrders(maxPages: Int = 5) async throws -> [WooOrder] {
@@ -189,13 +226,13 @@ final class WooClient {
     func updateOrderStatus(id: Int, status: String) async throws -> WooOrder {
         struct Update: Codable { let status: String }
         let body = try JSONEncoder().encode(Update(status: status))
-        return try await run(try request(path: "wc/v3/orders/\(id)", method: "PUT", body: body), as: WooOrder.self)
+        return try await run(path: "wc/v3/orders/\(id)", method: "PUT", body: body, as: WooOrder.self)
     }
 
     func posts(type: String = "posts", page: Int = 1, status: String? = nil) async throws -> [WPPost] {
         var query = [URLQueryItem(name: "per_page", value: "50"), URLQueryItem(name: "page", value: "\(page)")]
         if let status { query.append(URLQueryItem(name: "status", value: status)) }
-        return try await run(try request(path: "wp/v2/\(type)", query: query), as: [WPPost].self)
+        return try await run(path: "wp/v2/\(type)", query: query, as: [WPPost].self)
     }
 
     func regionMap() async throws -> [Int: String] {
@@ -205,7 +242,7 @@ final class WooClient {
             let Swiss_Product_ID: String?
             let USA_Product_ID: String?
         }
-        let rows: [RegionRow] = try await run(try request(path: "wooregion/v1/map"), as: [RegionRow].self)
+        let rows: [RegionRow] = try await run(path: "wooregion/v1/map", as: [RegionRow].self)
         var map: [Int: String] = [:]
         for row in rows {
             if let id = Int((row.EU_Product_id ?? "").trimmingCharacters(in: .whitespaces)) { map[id] = "EU" }
