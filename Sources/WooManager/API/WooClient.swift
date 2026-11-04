@@ -115,19 +115,6 @@ final class WooClient {
         }
         return req
     }
-        var req = URLRequest(url: url)
-        req.httpMethod = method
-        req.timeoutInterval = 30
-        req.setValue("WooManager/1.0 (macOS)", forHTTPHeaderField: "User-Agent")
-        if path.hasPrefix("wp/"), let contentAuth {
-            req.setValue("Basic \(contentAuth)", forHTTPHeaderField: "Authorization")
-        }
-        if let body {
-            req.httpBody = body
-            req.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        }
-        return req
-    }
 
     private func run<T: Decodable>(path: String, query: [URLQueryItem] = [], method: String = "GET", body: Data? = nil, as type: T.Type) async throws -> T {
         var restRoute = prefersRestRoute
