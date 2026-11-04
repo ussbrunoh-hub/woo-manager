@@ -15,7 +15,7 @@ enum WooError: LocalizedError {
         case .http(let code, let body):
             let hint: String
             switch code {
-            case 401, 403: hint = " Clé API refusée ou accès refusé : vérifiez la clé/le secret WooCommerce, et si l'erreur concerne le contenu, que l'API REST WordPress n'est pas bloquée (plugin de sécurité, pare-feu)."
+            case 401, 403: hint = " Clé API refusée ou accès refusé : vérifiez la clé/le secret WooCommerce. Si l'erreur concerne le contenu, votre site bloque l'API REST anonyme — renseignez un identifiant et un mot de passe d'application dans Réglages (section Contenu)."
             case 404: hint = " API introuvable : l'API REST WooCommerce est peut-être désactivée."
             default: hint = ""
             }
@@ -53,6 +53,7 @@ final class WooClient {
     private let baseURL: URL
     private let key: String
     private let secret: String
+    private let contentAuth: String?
 
     init(config: SiteConfig) {
         let cfg = URLSessionConfiguration.ephemeral
@@ -67,6 +68,13 @@ final class WooClient {
         self.baseURL = URL(string: url) ?? URL(string: "https://invalid")!
         self.key = config.consumerKey.trimmingCharacters(in: .whitespacesAndNewlines)
         self.secret = config.consumerSecret.trimmingCharacters(in: .whitespacesAndNewlines)
+        if config.hasContentAuth {
+            let user = (config.wpUser ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+            let pass = (config.wpAppPassword ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+            self.contentAuth = Data("\(user):\(pass)".utf8).base64EncodedString()
+        } else {
+            self.contentAuth = nil
+        }
     }
 
     private func request(path: String, query: [URLQueryItem] = [], method: String = "GET", body: Data? = nil) throws -> URLRequest {
@@ -84,6 +92,9 @@ final class WooClient {
         req.httpMethod = method
         req.timeoutInterval = 30
         req.setValue("WooManager/1.0 (macOS)", forHTTPHeaderField: "User-Agent")
+        if path.hasPrefix("wp/"), let contentAuth {
+            req.setValue("Basic \(contentAuth)", forHTTPHeaderField: "Authorization")
+        }
         if let body {
             req.httpBody = body
             req.setValue("application/json", forHTTPHeaderField: "Content-Type")

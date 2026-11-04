@@ -4,11 +4,19 @@ struct SiteConfig: Codable {
     var siteURL: String
     var consumerKey: String
     var consumerSecret: String
+    var wpUser: String?
+    var wpAppPassword: String?
 
     static let defaults = SiteConfig(siteURL: "", consumerKey: "", consumerSecret: "")
 
     var isValid: Bool {
         !siteURL.isEmpty && !consumerKey.isEmpty && !consumerSecret.isEmpty
+    }
+
+    var hasContentAuth: Bool {
+        let user = (wpUser ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        let pass = (wpAppPassword ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        return !user.isEmpty && !pass.isEmpty
     }
 }
 
