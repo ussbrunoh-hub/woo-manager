@@ -15,14 +15,36 @@ enum WooError: LocalizedError {
         case .http(let code, let body):
             let hint: String
             switch code {
-            case 401, 403: hint = " Clé API refusée : vérifiez la clé/le secret WooCommerce."
+            case 401, 403: hint = " Clé API refusée ou accès refusé : vérifiez la clé/le secret WooCommerce, et si l'erreur concerne le contenu, que l'API REST WordPress n'est pas bloquée (plugin de sécurité, pare-feu)."
             case 404: hint = " API introuvable : l'API REST WooCommerce est peut-être désactivée."
             default: hint = ""
             }
-            return "Erreur HTTP \(code).\(hint)\(body.isEmpty ? "" : "\n\(body.prefix(300))")"
+            let cleaned = WooError.cleanBody(body)
+            return "Erreur HTTP \(code).\(hint)\(cleaned.isEmpty ? "" : "\n\(cleaned)")"
         case .decoding(let message):
             return "Données inattendues : \(message)"
         }
+    }
+
+    static func cleanBody(_ body: String) -> String {
+        guard body.contains("<") else { return String(body.prefix(300)).trimmingCharacters(in: .whitespacesAndNewlines) }
+        if let title = body.range(of: "<title[^>]*>", options: .regularExpression) {
+            let after = body[title.upperBound...]
+            if let end = after.range(of: "</title>") {
+                let text = after[..<end.lowerBound]
+                    .replacingOccurrences(of: "&nbsp;", with: " ")
+                    .replacingOccurrences(of: "&amp;", with: "&")
+                    .replacingOccurrences(of: "<[^>]+>", with: " ", options: .regularExpression)
+                let cleaned = String(text).replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+                if !cleaned.isEmpty { return cleaned }
+            }
+        }
+        let stripped = body
+            .replacingOccurrences(of: "<[^>]+>", with: " ", options: .regularExpression)
+            .replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        return String(stripped.prefix(300))
     }
 }
 
@@ -52,13 +74,16 @@ final class WooClient {
             throw WooError.invalidURL
         }
         var items = query
-        items.append(URLQueryItem(name: "consumer_key", value: key))
-        items.append(URLQueryItem(name: "consumer_secret", value: secret))
+        if !path.hasPrefix("wp/") {
+            items.append(URLQueryItem(name: "consumer_key", value: key))
+            items.append(URLQueryItem(name: "consumer_secret", value: secret))
+        }
         components.queryItems = items.isEmpty ? nil : items
         guard let url = components.url else { throw WooError.invalidURL }
         var req = URLRequest(url: url)
         req.httpMethod = method
         req.timeoutInterval = 30
+        req.setValue("WooManager/1.0 (macOS)", forHTTPHeaderField: "User-Agent")
         if let body {
             req.httpBody = body
             req.setValue("application/json", forHTTPHeaderField: "Content-Type")
