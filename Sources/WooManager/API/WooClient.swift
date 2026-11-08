@@ -15,7 +15,7 @@ enum WooError: LocalizedError {
         case .http(let code, let body):
             let hint: String
             switch code {
-            case 401, 403: hint = " Clé API refusée ou accès refusé : vérifiez la clé/le secret WooCommerce. Si l'erreur concerne le contenu, votre site bloque l'API REST anonyme — renseignez un identifiant et un mot de passe d'application dans Réglages (section Contenu)."
+            case 401, 403: hint = " Clé API refusée ou accès refusé : vérifiez la clé/le secret WooCommerce. Si l'erreur concerne le contenu : installez le plugin « WooManager Content API » sur votre site, et renseignez un identifiant et un mot de passe d'application dans Réglages (section Contenu)."
             case 404: hint = " API introuvable : l'API REST WooCommerce est peut-être désactivée."
             default: hint = ""
             }
@@ -106,7 +106,7 @@ final class WooClient {
         req.httpMethod = method
         req.timeoutInterval = 30
         req.setValue("WooManager/1.0 (macOS)", forHTTPHeaderField: "User-Agent")
-        if path.hasPrefix("wp/"), let contentAuth {
+        if (path.hasPrefix("wp/") || path.hasPrefix("woomanager/")), let contentAuth {
             req.setValue("Basic \(contentAuth)", forHTTPHeaderField: "Authorization")
         }
         if let body {
@@ -218,9 +218,13 @@ final class WooClient {
     }
 
     func posts(type: String = "posts", page: Int = 1, status: String? = nil) async throws -> [WPPost] {
-        var query = [URLQueryItem(name: "per_page", value: "50"), URLQueryItem(name: "page", value: "\(page)")]
-        if let status { query.append(URLQueryItem(name: "status", value: status)) }
-        return try await run(path: "wp/v2/\(type)", query: query, as: [WPPost].self)
+        do {
+            let query = [URLQueryItem(name: "type", value: type), URLQueryItem(name: "per_page", value: "50"), URLQueryItem(name: "page", value: "\(page)")]
+            return try await run(path: "woomanager/v1/content", query: query, as: [WPPost].self)
+        } catch WooError.http(404, _) {
+            let query = [URLQueryItem(name: "per_page", value: "50"), URLQueryItem(name: "page", value: "\(page)"), URLQueryItem(name: "status", value: status ?? "publish,draft,pending,private,future")]
+            return try await run(path: "wp/v2/\(type)", query: query, as: [WPPost].self)
+        }
     }
 
     func regionMap() async throws -> [Int: String] {
