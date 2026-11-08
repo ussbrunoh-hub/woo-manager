@@ -129,13 +129,14 @@ final class WooClient {
             if let http = response as? HTTPURLResponse, !(200..<300).contains(http.statusCode) {
                 if http.statusCode == 403, attempt == 0, !restRoute {
                     restRoute = true
-                    prefersRestRoute = true
                     continue
                 }
                 throw WooError.http(http.statusCode, String(data: data, encoding: .utf8) ?? "")
             }
             do {
-                return try JSONDecoder().decode(T.self, from: data)
+                let decoded = try JSONDecoder().decode(T.self, from: data)
+                if restRoute && !prefersRestRoute { prefersRestRoute = true }
+                return decoded
             } catch {
                 throw WooError.decoding(error.localizedDescription)
             }
